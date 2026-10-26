@@ -1,0 +1,21 @@
+# 构建产物
+build/
+build-static/
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+
+# 内嵌的 esptool（用 scripts/fetch_esptool.ps1 获取，不入库）
+tools/esptool.exe
+
+# 编辑器
+.vscode/
+.idea/
+*.user
+CMakeLists.txt.user
+
+# 系统
+.DS_Store
+Thumbs.db
