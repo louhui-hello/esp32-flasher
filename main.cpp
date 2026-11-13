@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -11,6 +12,7 @@
 #include "src/serialmonitor.h"
 #include "src/portlister.h"
 
+#ifdef ESPFLASHER_BUNDLE_ESPTOOL
 /**
  * 把 qrc 里的 esptool.exe 解到本地，避免依赖外部文件。
  * 优先解到 exe 同级目录（真正的绿色）；目录不可写时才退到用户缓存。
@@ -50,16 +52,20 @@ static QString ensureBundledEsptool()
     return target;
 }
 
+#endif
+
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     app.setApplicationName("ESP32 Flasher");
     app.setOrganizationName("louhui-hello");
 
+#ifdef ESPFLASHER_BUNDLE_ESPTOOL
     // 单文件模式：先把内嵌的 esptool 解出来
     const QString esptool = ensureBundledEsptool();
     if (!esptool.isEmpty())
         EsptoolRunner::setBundledPath(esptool);
+#endif
 
     qmlRegisterType<EsptoolRunner>("EspFlasher", 1, 0, "EsptoolRunner");
     qmlRegisterType<SerialMonitor>("EspFlasher", 1, 0, "SerialMonitor");

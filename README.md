@@ -1,85 +1,70 @@
 # ESP32 Flasher
 
-ESP32 烧录器 —— Qt 6 QML 写的图形界面，包一层 esptool。
-**静态 Qt 编译，零第三方 DLL 依赖**，单文件即可运行。
-
-![screenshot](docs/screenshot.png)
+基于 Qt 6 / QML 的 ESP32 图形烧录器，通过独立的 esptool 进程执行芯片操作。
 
 ## 功能
 
-- 串口自动枚举（PortLister）
-- 烧录 / 擦除 / 读芯片信息
-- 波特率可选 115200 ~ 921600
-- 芯片类型选择（esp32 / esp32s3 / esp32c3 / esp32c6 …）
-- 偏移量快捷选项（0x0 / 0x8000 / 0x10000 / 自定义）
-- 内置串口监视器（实时查看 log）
-- 拖放 .bin 文件直接烧录
+- 自动枚举串口，支持 ESP32-S3、ESP32-S2、ESP32-C3、ESP32、ESP8266。
+- 烧录固件、擦除 Flash、读取芯片信息，显示 esptool 输出和进度。
+- 支持拖放 `.bin` 文件，烧录偏移可选 0x0 / 0x10000。
+- 串口监视、文本发送及 Hex 显示；烧录前关闭串口监视。
+- 提供 LLVM-MinGW + 静态 Qt 的 Windows x64 Release 构建。
 
-## 下载
+## 下载与运行
 
-到 [Releases](https://github.com/louhui-hello/esp32-flasher/releases) 下载
-`esp32flasher.exe`，双击运行，**不需要安装 Qt 或任何运行库**。
+从 [Releases](https://github.com/louhui-hello/esp32-flasher/releases) 下载发布包，解压后运行 `esp32flasher.exe`。
+标准便携版需要保留同目录的 `esptool.exe`。Qt 库已静态链接，esptool 内含 Python，运行时无需安装 Qt、Python 或激活 venv。
 
-首次启动会在同一目录解出一个 `esptool.exe`（105 KB，内置在 exe 里）。
+选择串口、芯片、固件及正确的烧录偏移，再开始烧录。固件的分区和偏移必须与目标设备对应。
+构建验证不包含真机擦除或烧录。
 
-## 编译
+## LLVM 静态构建
 
-### 依赖
-
-| 组件 | 版本 |
-|---|---|
-| Qt | 6.12（Quick / QuickControls2 / SerialPort） |
-| CMake | 3.21+ |
-| 编译器 | MinGW 13.1（静态 Qt 也用这个） |
-
-### 动态版（开发用）
+依赖：PowerShell、CMake 3.21+、Ninja、LLVM-MinGW、与其 ABI 匹配的静态 Qt，以及 Python 3.11。
+Qt 模块需要 Quick、QuickControls2、SerialPort、Svg 和对应的 QML 插件。
+本次构建使用 Clang 22.1.7、Qt 6.12.0、UCRT、Windows x86_64。
 
 ```powershell
-cmake -G Ninja -B build -DCMAKE_PREFIX_PATH=G:/lang/Qt/6.12.0/mingw_64
-cmake --build build
-cd build && windeployqt --release --qmldir ../qml esp32flasher.exe
+.uild-llvm-static.ps1
 ```
 
-### 静态版（发布用，单文件）
+脚本的默认路径对应本机安装；其他机器可使用 `-QtPrefix`、`-CompilerBin`、`-CMake`、`-Ninja`、`-Python` 指定工具位置。
+构建目录为 `build/llvm-static`，发布目录为 `dist/llvm-static`。
 
-先编静态 Qt（一次性，约 1 小时）：
+Python 依赖只安装在 `build/esptool-venv`，版本锁定于 `packaging/esptool-requirements.txt`。
+`package-esptool.ps1` 使用 PyInstaller 生成独立后端，不修改全局 Python 包。
+
+### 可选内嵌后端
 
 ```powershell
-.\configure.bat -static -static-runtime -release -platform win32-g++ ^
-    -prefix G:\lang\Qt-static-6.12.0 -nomake examples -nomake tests ^
-    -skip qtwebengine -skip qtquick3d -skip qtquick3dphysics -skip qtmultimedia
-ninja -j16
-ninja install
+.uild-llvm-static.ps1 -BundleEsptool
 ```
 
-再编烧录器：
+启用后，esptool 会作为 Qt 资源编入程序，首次运行解出到程序目录；目录不可写时使用用户数据目录。
+CMake 选项为 `ESPFLASHER_BUNDLE_ESPTOOL=ON`。默认关闭，使用两个 EXE 的便携布局。
+
+### 常规动态 Qt 构建
 
 ```powershell
-.\scripts\fetch_esptool.ps1 -Version 5.6.0
-cmake -G Ninja -B build-static -DCMAKE_BUILD_TYPE=Release ^
-      -DCMAKE_PREFIX_PATH=G:\lang\Qt-static-6.12.0
-cmake --build build-static
+cmake -S . -B build/dynamic -G Ninja -DCMAKE_PREFIX_PATH=/path/to/Qt
+cmake --build build/dynamic --parallel
+# 使用对应 Qt 的 windeployqt，QML 路径为 ./qml
 ```
 
-产物 `esp32flasher.exe` 约 105 MB，`objdump -p` 里只有 Windows 系统 DLL。
+## 项目结构
 
-## 内嵌 esptool 的原理
+- `src/`：esptool 调用、串口监视和端口枚举。
+- `qml/`：用户界面。
+- `cmake/StaticQt.cmake`：静态 Qt 插件配置。
+- `packaging/`：Python 入口和固定版本依赖。
+- `build-llvm-static.ps1`：LLVM 构建与发布目录生成。
+- `package-esptool.ps1`：venv 与 PyInstaller 后端打包。
 
-```
-tools/esptool.exe  →  qt_add_resources()  →  编进 exe 的 .rcc 段
-首次启动           →  ensureBundledEsptool() 解出到 exe 同级目录
-                   →  目录不可写时退回 %LOCALAPPDATA%
-```
+## 许可证
 
-`tools/esptool.exe` 不进仓库（它是 esptool 的 GPL 二进制），
-用 `scripts/fetch_esptool.ps1` 自动下载官方 release。
+本仓库的应用代码采用 **GNU GPL v3.0（GPL-3.0-only）**，见 [LICENSE](LICENSE)。
+本次提交起使用该许可证；已发布的旧版本保留其原有许可。
 
-## 许可
-
-本项目采用 **LGPL-3.0**，见 [LICENSE](LICENSE)。
-
-Qt 亦为 LGPL-3.0。静态链接 LGPL 库时，本项目整体以 LGPL-3.0 发布，
-因此满足"可重新链接"的要求（源码可获取、可自行重新编译）。
-
-内嵌的 `esptool.exe` 来自 [espressif/esptool](https://github.com/espressif/esptool)，
-遵循 GPL-2.0，作为独立程序通过命令行调用，不并入本程序。
+Qt、esptool、Python、PyInstaller 及其依赖保留各自版权和许可证。
+其中 esptool 为 GPL-2.0-or-later，作为独立进程调用。
+第三方来源、版本和构建方式见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

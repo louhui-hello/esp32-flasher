@@ -19,3 +19,15 @@ CMakeLists.txt.user
 # 系统
 .DS_Store
 Thumbs.db
+
+# Local packaging outputs and archived source copies
+dist/
+release/
+sourcecode/
+.venv/
+__pycache__/
+*.pyc
+*.pfx
+*.p12
+*.key
+.env
